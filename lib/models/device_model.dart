@@ -6,10 +6,15 @@ class DeviceModel {
   bool isOn;
   final IconData icon;
 
+  final int watts;
+  final double ratePerKwh;
+
   DeviceModel({
     required this.name,
     required this.count,
     required this.isOn,
     required this.icon,
+    required this.watts,
+    required this.ratePerKwh,
   });
 }

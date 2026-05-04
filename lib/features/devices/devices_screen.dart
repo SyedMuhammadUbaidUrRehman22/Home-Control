@@ -1,115 +1,130 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-class DevicesScreen extends StatefulWidget {
+class DevicesScreen extends StatelessWidget {
   const DevicesScreen({super.key});
 
-  @override
-  State<DevicesScreen> createState() => _DevicesScreenState();
-}
+  IconData _getDeviceIcon(dynamic type) {
+    switch (type?.toString().toLowerCase()) {
+      case 'light':
+        return Icons.lightbulb_outline;
+      case 'ac':
+        return Icons.ac_unit;
+      case 'tv':
+        return Icons.tv;
+      case 'plug':
+        return Icons.power;
+      case 'blinds':
+        return Icons.window;
+      default:
+        return Icons.devices;
+    }
+  }
 
-class _DevicesScreenState extends State<DevicesScreen> {
-  final devices = [
-    {
-      'name': 'Living Room Light',
-      'room': 'Living Room',
-      'type': 'Light',
-      'isOn': true,
-    },
-    {'name': 'Bedroom AC', 'room': 'Bedroom', 'type': 'AC', 'isOn': false},
-    {'name': 'Smart TV', 'room': 'Living Room', 'type': 'TV', 'isOn': true},
-    {'name': 'Kitchen Plug', 'room': 'Kitchen', 'type': 'Plug', 'isOn': false},
-  ];
+  Future<void> _toggleDevice(String id, bool value) async {
+    await FirebaseFirestore.instance.collection('devices').doc(id).update({
+      'isOn': value,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> _deleteDevice(String id) async {
+    await FirebaseFirestore.instance.collection('devices').doc(id).delete();
+  }
 
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'All Devices',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Manage connected smart devices',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 20),
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('devices').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
 
-            Expanded(
-              child: ListView.builder(
-                itemCount: devices.length,
-                itemBuilder: (context, index) {
-                  final device = devices[index];
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 14),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFFCF8),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF6C5CE7).withOpacity(0.08),
-                          blurRadius: 18,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: const Color(
-                            0xFFFFB86B,
-                          ).withOpacity(0.25),
-                          child: const Icon(
-                            Icons.devices,
-                            color: Color(0xFF6C5CE7),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
+          final docs = snapshot.data?.docs ?? [];
 
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                device['name'].toString(),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${device['room']} • ${device['type']}',
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        Switch(
-                          value: device['isOn'] as bool,
-                          onChanged: (value) {
-                            setState(() {
-                              device['isOn'] = value;
-                            });
-                          },
-                        ),
-                      ],
-                    ),
-                  );
-                },
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Text(
+                'All Devices',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 6),
+              Text(
+                '${docs.length} connected devices',
+                style: const TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 20),
+
+              if (docs.isEmpty) const Center(child: Text('No devices found')),
+
+              ...docs.map((doc) {
+                final data = doc.data() as Map<String, dynamic>;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 14),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).cardColor,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: const Color(
+                          0xFFFFB86B,
+                        ).withOpacity(0.25),
+                        child: Icon(
+                          _getDeviceIcon(data['type']),
+                          color: const Color(0xFF6C5CE7),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              data['name'] ?? 'Unknown Device',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${data['room'] ?? 'Unknown Room'} • ${data['type'] ?? 'Device'}',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      Switch(
+                        value: data['isOn'] ?? false,
+                        onChanged: (value) => _toggleDevice(doc.id, value),
+                      ),
+
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: () => _deleteDevice(doc.id),
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          );
+        },
       ),
     );
   }

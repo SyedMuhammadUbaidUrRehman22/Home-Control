@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-
+import '../devices/add_device_screen.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/device_model.dart';
 import '../analytics/analytics_screen.dart';
@@ -48,44 +48,57 @@ class _HomeScreenState extends State<HomeScreen> {
         return Icons.devices;
     }
   }
+Future<void> toggleDevice({
+  required QueryDocumentSnapshot deviceDoc,
+  required bool value,
+}) async {
+  final data = deviceDoc.data() as Map<String, dynamic>;
 
-  Future<void> toggleDevice({
-    required QueryDocumentSnapshot deviceDoc,
-    required bool value,
-  }) async {
-    final data = deviceDoc.data() as Map<String, dynamic>;
-    final oldValue = data['isOn'] ?? false;
+  final now = DateTime.now();
 
-    try {
-      await FirebaseFirestore.instance
-          .collection('devices')
-          .doc(deviceDoc.id)
-          .update({'isOn': value, 'updatedAt': FieldValue.serverTimestamp()});
+  if (value == true) {
+    // TURNING ON
+    await deviceDoc.reference.update({
+      'isOn': true,
+      'lastTurnedOnAt': now.toIso8601String(),
+    });
+  } else {
+    // TURNING OFF → CALCULATE ENERGY
+    final lastOn = data['lastTurnedOnAt'];
 
-      await FirebaseFirestore.instance.collection('device_logs').add({
-        'deviceId': deviceDoc.id,
-        'deviceName': data['name'] ?? 'Unknown Device',
-        'room': data['room'] ?? 'Unknown Room',
-        'oldStatus': oldValue,
-        'newStatus': value,
-        'userId': FirebaseAuth.instance.currentUser?.uid,
-        'timestamp': FieldValue.serverTimestamp(),
-        'action': 'manual_toggle',
+    if (lastOn != null) {
+      final start = DateTime.parse(lastOn);
+      final minutes = now.difference(start).inMinutes;
+
+      final wattsValue = data['watts'];
+      final rateValue = data['ratePerKwh'];
+      final watts = wattsValue is num
+          ? wattsValue.toDouble()
+          : double.tryParse(wattsValue?.toString() ?? '') ?? 60.0;
+      final rate = rateValue is num
+          ? rateValue.toDouble()
+          : double.tryParse(rateValue?.toString() ?? '') ?? 50.0;
+
+      final hours = minutes / 60;
+
+      final kwh = (watts * hours) / 1000;
+      final cost = kwh * rate;
+
+      await deviceDoc.reference.update({
+        'isOn': false,
+        'totalUsageMinutes':
+            (data['totalUsageMinutes'] ?? 0) + minutes,
+        'estimatedCost':
+            (data['estimatedCost'] ?? 0) + cost,
+        'lastTurnedOnAt': null,
       });
-    } on FirebaseException catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.message ?? 'Unable to update device.'),
-        ),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to update device: $error')),
-      );
+    } else {
+      await deviceDoc.reference.update({
+        'isOn': false,
+      });
     }
   }
+}
 
   Future<void> turnOffAllDevices() async {
     if (isTurningOff) return;
@@ -283,170 +296,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> showAddDeviceDialog() async {
-    final rootContext = context;
-    final nameController = TextEditingController();
-    final countController = TextEditingController(text: '1');
-
-    String selectedRoom = rooms[selectedRoomIndex];
-    String selectedType = 'Light';
-    bool isOn = false;
-
-    try {
-      await showDialog(
-        context: rootContext,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setDialogState) {
-              return AlertDialog(
-                title: const Text('Add Device'),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Device Name',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: countController,
-                        keyboardType: TextInputType.number,
-                        decoration: const InputDecoration(
-                          labelText: 'Device Count',
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedType,
-                        decoration: const InputDecoration(
-                          labelText: 'Device Type',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 'Light', child: Text('Light')),
-                          DropdownMenuItem(value: 'AC', child: Text('AC')),
-                          DropdownMenuItem(value: 'TV', child: Text('TV')),
-                          DropdownMenuItem(value: 'Plug', child: Text('Plug')),
-                          DropdownMenuItem(
-                            value: 'Blinds',
-                            child: Text('Blinds'),
-                          ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() => selectedType = value);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      DropdownButtonFormField<String>(
-                        value: selectedRoom,
-                        decoration: const InputDecoration(
-                          labelText: 'Room',
-                          border: OutlineInputBorder(),
-                        ),
-                        items: rooms.map((room) {
-                          return DropdownMenuItem(value: room, child: Text(room));
-                        }).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setDialogState(() => selectedRoom = value);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: 12),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: const Text('Device is ON'),
-                        value: isOn,
-                        onChanged: (value) {
-                          setDialogState(() => isOn = value);
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(dialogContext),
-                    child: const Text('Cancel'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      final name = nameController.text.trim();
-                      final count = int.tryParse(countController.text.trim()) ?? 1;
-
-                      if (name.isEmpty) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(rootContext).showSnackBar(
-                          const SnackBar(
-                            content: Text('Device name is required'),
-                          ),
-                        );
-                        return;
-                      }
-
-                      try {
-                        await FirebaseFirestore.instance.collection('devices').add({
-                          'name': name,
-                          'count': count,
-                          'type': selectedType,
-                          'room': selectedRoom,
-                          'isOn': isOn,
-                          'userId': FirebaseAuth.instance.currentUser?.uid,
-                          'createdAt': FieldValue.serverTimestamp(),
-                          'updatedAt': FieldValue.serverTimestamp(),
-                        });
-
-                        await FirebaseFirestore.instance
-                            .collection('device_logs')
-                            .add({
-                              'deviceName': name,
-                              'room': selectedRoom,
-                              'newStatus': isOn,
-                              'userId': FirebaseAuth.instance.currentUser?.uid,
-                              'timestamp': FieldValue.serverTimestamp(),
-                              'action': 'device_added',
-                            });
-
-                        if (!mounted) return;
-                        Navigator.pop(dialogContext);
-                      } on FirebaseException catch (error) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(rootContext).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              error.message ?? 'Failed to add device. Check permissions.',
-                            ),
-                          ),
-                        );
-                      } catch (error) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(rootContext).showSnackBar(
-                          SnackBar(
-                            content: Text('Failed to add device: $error'),
-                          ),
-                        );
-                      }
-                    },
-                    child: const Text('Add'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      );
-    } finally {
-      nameController.dispose();
-      countController.dispose();
-    }
-  }
 
   void showQuickMenu() {
     showModalBottomSheet(
@@ -582,7 +431,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: FloatingActionButton(
                 backgroundColor: AppColors.primary,
-                onPressed: showAddDeviceDialog,
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AddDeviceScreen()),
+                  );
+                },
                 child: const Icon(Icons.add, color: Colors.white),
               ),
             )
@@ -761,14 +615,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         final doc = docs[index];
                         final data = doc.data() as Map<String, dynamic>;
 
+                        final wattsValue = data['watts'];
+                        final rateValue = data['ratePerKwh'];
+                        final countValue = data['count'];
+
                         return GestureDetector(
                           onLongPress: () => showDeviceOptions(doc),
                           child: DeviceCard(
                             device: DeviceModel(
                               name: data['name'] ?? 'Unknown Device',
-                              count: data['count'] ?? 1,
+                              count: countValue is num
+                                  ? countValue.toInt()
+                                  : int.tryParse(countValue?.toString() ?? '') ?? 1,
                               isOn: data['isOn'] ?? false,
                               icon: _getDeviceIcon(data['type']),
+                              watts: wattsValue is num
+                                  ? wattsValue.toInt()
+                                  : int.tryParse(wattsValue?.toString() ?? '') ?? 60,
+                              ratePerKwh: rateValue is num
+                                  ? rateValue.toDouble()
+                                  : double.tryParse(rateValue?.toString() ?? '') ?? 50.0,
                             ),
                             onToggle: (value) {
                               toggleDevice(deviceDoc: doc, value: value);
