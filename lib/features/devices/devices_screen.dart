@@ -79,7 +79,7 @@ class DevicesScreen extends StatelessWidget {
                       CircleAvatar(
                         backgroundColor: const Color(
                           0xFFFFB86B,
-                        ).withOpacity(0.25),
+                        ).withValues(alpha: 0.25),
                         child: Icon(
                           _getDeviceIcon(data['type']),
                           color: const Color(0xFF6C5CE7),

@@ -58,9 +58,10 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
       'connectionStatus': 'Connected',
       'watts': watts,
       'ratePerKwh': rate,
+      'totalKwh': 0.0,
+      'estimatedCost': 0.0,
       'totalUsageMinutes': 0,
-      'estimatedCost': 0,
-      'lastTurnedOnAt': null,
+      'lastTurnedOnAt': isOn ? DateTime.now().toIso8601String() : null,
       'userId': FirebaseAuth.instance.currentUser?.uid,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -106,12 +107,13 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
           ),
           const SizedBox(height: 12),
 
-          DropdownButtonFormField<String>(
+          const Text('Device Type', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+
+          const SizedBox(height: 8),
+
+          DropdownButton<String>(
             value: selectedType,
-            decoration: const InputDecoration(
-              labelText: 'Device Type',
-              border: OutlineInputBorder(),
-            ),
+            isExpanded: true,
             items: const [
               DropdownMenuItem(value: 'Light', child: Text('Light')),
               DropdownMenuItem(value: 'AC', child: Text('AC')),
@@ -123,14 +125,16 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
               if (value != null) setState(() => selectedType = value);
             },
           ),
+
           const SizedBox(height: 12),
 
-          DropdownButtonFormField<String>(
+          const Text('Room', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+
+          const SizedBox(height: 8),
+
+          DropdownButton<String>(
             value: selectedRoom,
-            decoration: const InputDecoration(
-              labelText: 'Room',
-              border: OutlineInputBorder(),
-            ),
+            isExpanded: true,
             items: rooms.map((room) {
               return DropdownMenuItem(value: room, child: Text(room));
             }).toList(),
@@ -138,14 +142,16 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
               if (value != null) setState(() => selectedRoom = value);
             },
           ),
+
           const SizedBox(height: 12),
 
-          DropdownButtonFormField<String>(
+          const Text('Connection Type', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+
+          const SizedBox(height: 8),
+
+          DropdownButton<String>(
             value: connectionType,
-            decoration: const InputDecoration(
-              labelText: 'Connection Type',
-              border: OutlineInputBorder(),
-            ),
+            isExpanded: true,
             items: const [
               DropdownMenuItem(value: 'WiFi', child: Text('WiFi')),
               DropdownMenuItem(value: 'Bluetooth', child: Text('Bluetooth')),
@@ -159,6 +165,7 @@ class _AddDeviceScreenState extends State<AddDeviceScreen> {
               if (value != null) setState(() => connectionType = value);
             },
           ),
+
           const SizedBox(height: 12),
 
           TextField(

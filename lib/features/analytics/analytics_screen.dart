@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 class AnalyticsScreen extends StatelessWidget {
@@ -5,66 +6,60 @@ class AnalyticsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
-    final values = [120.0, 180.0, 90.0, 240.0, 160.0, 210.0];
-    final maxValue = values.reduce((a, b) => a > b ? a : b);
-
     return SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text(
-            'Energy Analytics',
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'Monthly smart home usage',
-            style: TextStyle(color: Colors.grey),
-          ),
-          const SizedBox(height: 24),
+      child: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('devices').snapshots(),
+        builder: (context, snapshot) {
+          double totalCost = 0;
+          double totalKwh = 0;
+          int activeDevices = 0;
 
-          Container(
-            height: 260,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFFCF8),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(months.length, (index) {
-                final barHeight = (values[index] / maxValue) * 170;
+          if (snapshot.hasData) {
+            for (final doc in snapshot.data!.docs) {
+              final data = doc.data() as Map<String, dynamic>;
 
-                return Expanded(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Container(
-                        height: barHeight,
-                        width: 24,
-                        decoration: BoxDecoration(
-                          color: index == 3
-                              ? const Color(0xFF6C5CE7)
-                              : const Color(0xFFFFB86B),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(months[index], style: const TextStyle(fontSize: 11)),
-                    ],
-                  ),
-                );
-              }),
-            ),
-          ),
+              totalCost += (data['estimatedCost'] ?? 0).toDouble();
+              totalKwh += (data['totalKwh'] ?? 0).toDouble();
 
-          const SizedBox(height: 20),
+              if (data['isOn'] == true) {
+                activeDevices++;
+              }
+            }
+          }
 
-          const _StatCard(title: 'Today Cost', value: '\$12.40'),
-          const _StatCard(title: 'This Month', value: '\$205.83'),
-          const _StatCard(title: 'Power Usage', value: '321.8 kWh'),
-        ],
+          return ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              const Text(
+                'Energy Analytics',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Real-time usage from device cycles',
+                style: TextStyle(color: Colors.grey),
+              ),
+              const SizedBox(height: 24),
+
+              _StatCard(
+                title: 'Total Cost',
+                value: totalCost.toStringAsFixed(2),
+              ),
+              _StatCard(
+                title: 'Total Energy',
+                value: '${totalKwh.toStringAsFixed(2)} kWh',
+              ),
+              _StatCard(title: 'Active Devices', value: '$activeDevices'),
+
+              const SizedBox(height: 20),
+
+              const Text(
+                'Note: cost increases only after a device is turned ON and then OFF.',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -82,7 +77,7 @@ class _StatCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFFFCF8),
+        color: Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(18),
       ),
       child: Row(

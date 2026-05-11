@@ -10,7 +10,7 @@ import '../settings/settings_screen.dart';
 import 'widgets/device_card.dart';
 import 'widgets/energy_card.dart';
 import 'widgets/room_tabs.dart';
-
+import '../devices/bluetooth_scan_screen.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -49,56 +49,66 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 Future<void> toggleDevice({
-  required QueryDocumentSnapshot deviceDoc,
-  required bool value,
-}) async {
-  final data = deviceDoc.data() as Map<String, dynamic>;
+    required QueryDocumentSnapshot deviceDoc,
+    required bool value,
+  }) async {
+    final data = deviceDoc.data() as Map<String, dynamic>;
+    final oldValue = data['isOn'] ?? false;
+    final now = DateTime.now();
 
-  final now = DateTime.now();
+    try {
+      if (value == true) {
+        await deviceDoc.reference.update({
+          'isOn': true,
+          'lastTurnedOnAt': now.toIso8601String(),
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        double usedKwh = 0;
+        double usedCost = 0;
+        int usedMinutes = 0;
 
-  if (value == true) {
-    // TURNING ON
-    await deviceDoc.reference.update({
-      'isOn': true,
-      'lastTurnedOnAt': now.toIso8601String(),
-    });
-  } else {
-    // TURNING OFF → CALCULATE ENERGY
-    final lastOn = data['lastTurnedOnAt'];
+        final lastTurnedOnAt = data['lastTurnedOnAt'];
 
-    if (lastOn != null) {
-      final start = DateTime.parse(lastOn);
-      final minutes = now.difference(start).inMinutes;
+        if (lastTurnedOnAt != null) {
+          final startedAt = DateTime.parse(lastTurnedOnAt);
+          usedMinutes = now.difference(startedAt).inMinutes;
 
-      final wattsValue = data['watts'];
-      final rateValue = data['ratePerKwh'];
-      final watts = wattsValue is num
-          ? wattsValue.toDouble()
-          : double.tryParse(wattsValue?.toString() ?? '') ?? 60.0;
-      final rate = rateValue is num
-          ? rateValue.toDouble()
-          : double.tryParse(rateValue?.toString() ?? '') ?? 50.0;
+          final watts = (data['watts'] ?? 60).toDouble();
+          final rate = (data['ratePerKwh'] ?? 50).toDouble();
 
-      final hours = minutes / 60;
+          final hours = usedMinutes / 60.0;
+          usedKwh = (watts * hours) / 1000.0;
+          usedCost = usedKwh * rate;
+        }
 
-      final kwh = (watts * hours) / 1000;
-      final cost = kwh * rate;
+        await deviceDoc.reference.update({
+          'isOn': false,
+          'lastTurnedOnAt': null,
+          'totalUsageMinutes': (data['totalUsageMinutes'] ?? 0) + usedMinutes,
+          'totalKwh': ((data['totalKwh'] ?? 0).toDouble()) + usedKwh,
+          'estimatedCost': ((data['estimatedCost'] ?? 0).toDouble()) + usedCost,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
 
-      await deviceDoc.reference.update({
-        'isOn': false,
-        'totalUsageMinutes':
-            (data['totalUsageMinutes'] ?? 0) + minutes,
-        'estimatedCost':
-            (data['estimatedCost'] ?? 0) + cost,
-        'lastTurnedOnAt': null,
+      await FirebaseFirestore.instance.collection('device_logs').add({
+        'deviceId': deviceDoc.id,
+        'deviceName': data['name'] ?? 'Unknown Device',
+        'room': data['room'] ?? 'Unknown Room',
+        'oldStatus': oldValue,
+        'newStatus': value,
+        'userId': FirebaseAuth.instance.currentUser?.uid,
+        'timestamp': FieldValue.serverTimestamp(),
+        'action': 'manual_toggle',
       });
-    } else {
-      await deviceDoc.reference.update({
-        'isOn': false,
-      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Energy update failed: $e')));
     }
   }
-}
 
   Future<void> turnOffAllDevices() async {
     if (isTurningOff) return;
@@ -423,7 +433,7 @@ Future<void> toggleDevice({
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.38),
+                    color: AppColors.primary.withValues(alpha: 0.38),
                     blurRadius: 24,
                     spreadRadius: 2,
                   ),
@@ -434,7 +444,9 @@ Future<void> toggleDevice({
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AddDeviceScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const BluetoothScanScreen(),
+                    ),
                   );
                 },
                 child: const Icon(Icons.add, color: Colors.white),
@@ -537,7 +549,25 @@ Future<void> toggleDevice({
 
               const SizedBox(height: 20),
 
-              const EnergyCard(),
+            StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('devices')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  double totalKwh = 0;
+                  double totalCost = 0;
+
+                  if (snapshot.hasData) {
+                    for (final doc in snapshot.data!.docs) {
+                      final data = doc.data() as Map<String, dynamic>;
+                      totalKwh += (data['totalKwh'] ?? 0).toDouble();
+                      totalCost += (data['estimatedCost'] ?? 0).toDouble();
+                    }
+                  }
+
+                  return EnergyCard(totalKwh: totalKwh, totalCost: totalCost);
+                },
+              ),
 
               const SizedBox(height: 12),
 

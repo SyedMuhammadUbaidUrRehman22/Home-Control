@@ -1,39 +1,73 @@
 import 'package:flutter/material.dart';
 
-class EnergyCard extends StatelessWidget {
-  final BoxDecoration? decoration;
+import '../../../core/theme/app_colors.dart';
 
-  const EnergyCard({super.key, this.decoration});
+class EnergyCard extends StatelessWidget {
+  final double totalKwh;
+  final double totalCost;
+
+  const EnergyCard({
+    super.key,
+    required this.totalKwh,
+    required this.totalCost,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final progress = (totalKwh / 100).clamp(0.0, 1.0);
+
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration:
-          decoration ??
-          BoxDecoration(
-            color: const Color.fromARGB(255, 249, 143, 3),
-            borderRadius: BorderRadius.circular(24),
-          ),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppColors.primary, AppColors.accent],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: const [
+        children: [
+          const Text(
+            'Energy Usage This Month',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
           Text(
-            'Energy Usage',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
+            '${totalKwh.toStringAsFixed(2)} kWh',
+            style: const TextStyle(
               color: Colors.white,
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
             ),
           ),
-          SizedBox(height: 10),
+          const SizedBox(height: 14),
+          Stack(
+            children: [
+              Container(
+                height: 12,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              FractionallySizedBox(
+                widthFactor: progress,
+                child: Container(
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
           Text(
-            '321.8 kWh',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
+            'Estimated Cost: ${totalCost.toStringAsFixed(2)}',
+            style: const TextStyle(color: Colors.white70),
           ),
         ],
       ),
