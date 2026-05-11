@@ -11,6 +11,7 @@ import 'widgets/device_card.dart';
 import 'widgets/energy_card.dart';
 import 'widgets/room_tabs.dart';
 import '../devices/bluetooth_scan_screen.dart';
+import '../devices/add_device_options_sheet.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -442,11 +443,16 @@ Future<void> toggleDevice({
               child: FloatingActionButton(
                 backgroundColor: AppColors.primary,
                 onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const BluetoothScanScreen(),
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+                    shape: const RoundedRectangleBorder(
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
                     ),
+                    builder: (_) => const AddDeviceOptionsSheet(),
                   );
                 },
                 child: const Icon(Icons.add, color: Colors.white),
